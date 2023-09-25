@@ -1,112 +1,111 @@
 
 #Main Code
 
-# from threading import Thread
-# import cv2
-# import time
-# from ultralytics import YOLO
-# import face_recognition
+from threading import Thread
+import cv2
+import time
+from ultralytics import YOLO
+import face_recognition
 
 
-# # config_file='ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt'
-# # frozen_model='frozen_inference_graph.pb'
-# # model=cv2.dnn_DetectionModel(frozen_model,config_file)
-# # classlabel=["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat"]
+# config_file='ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt'
+# frozen_model='frozen_inference_graph.pb'
+# model=cv2.dnn_DetectionModel(frozen_model,config_file)
+# classlabel=["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat"]
 
-# # model.setInputSize(320, 320)
-# # model.setInputScale(1.0 / 127.5)
-# # model.setInputMean((127.5, 127.5, 127.5))
-# # model.setInputSwapRB(True)
+# model.setInputSize(320, 320)
+# model.setInputScale(1.0 / 127.5)
+# model.setInputMean((127.5, 127.5, 127.5))
+# model.setInputSwapRB(True)
 
-# # unique_ids = {}
+# unique_ids = {}
 
-# # def assign_unique_id(cIndex, frame_name):
-# #     global unique_ids
-# #     if frame_name == 'Camera 1':
-# #         if cIndex not in unique_ids:
-# #             # Generate a new unique ID for the person in Camera 1
-# #             unique_ids[cIndex] = len(unique_ids) + 1
-# #         return unique_ids[cIndex]
-# #     elif frame_name == 'Camera 2':
-# #         if cIndex in unique_ids:
-# #             # Use the same unique ID assigned in Camera 1 for the person in Camera 2
-# #             return unique_ids[cIndex]
-# #         else:
-# #             # Generate a new unique ID for the person in Camera 2
-# #             new_id = max(unique_ids.values()) + 1 if unique_ids else 1
-# #             unique_ids[cIndex] = new_id
-# #             return new_id
+# def assign_unique_id(cIndex, frame_name):
+#     global unique_ids
+#     if frame_name == 'Camera 1':
+#         if cIndex not in unique_ids:
+#             # Generate a new unique ID for the person in Camera 1
+#             unique_ids[cIndex] = len(unique_ids) + 1
+#         return unique_ids[cIndex]
+#     elif frame_name == 'Camera 2':
+#         if cIndex in unique_ids:
+#             # Use the same unique ID assigned in Camera 1 for the person in Camera 2
+#             return unique_ids[cIndex]
+#         else:
+#             # Generate a new unique ID for the person in Camera 2
+#             new_id = max(unique_ids.values()) + 1 if unique_ids else 1
+#             unique_ids[cIndex] = new_id
+#             return new_id
 
-# model=YOLO("yolov8n.pt")
-# class VStream:
-#     def __init__(self,src):
-#         self.capture=cv2.VideoCapture(src,cv2.CAP_DSHOW)
-#         self.thread=Thread(target=self.update,args=())
-#         self.thread.daemon=True
-#         self.thread.start()
-#         # self.persons = {} 
-#     def update(self):
-#         while True:
-#             _,self.frame=self.capture.read()
-#     def getFrame(self):
-#         return self.frame
+model=YOLO("yolov8n.pt")
+class VStream:
+    def __init__(self,src):
+        self.capture=cv2.VideoCapture(src,cv2.CAP_DSHOW)
+        self.thread=Thread(target=self.update,args=())
+        self.thread.daemon=True
+        self.thread.start()
+        # self.persons = {} 
+    def update(self):
+        while True:
+            _,self.frame=self.capture.read()
+    def getFrame(self):
+        return self.frame
     
-# flip=2
-# dispW=640
-# dispH=480
+flip=2
+dispW=640
+dispH=480
 
-# cam1=VStream(0)
-# cam2=VStream(1)
+cam1=VStream(0)
+cam2=VStream(1)
 
-# object_ids_camera0 = {}  # Dictionary to store object IDs for Camera 0
-# next_object_id = 1  
+object_ids_camera0 = {}  # Dictionary to store object IDs for Camera 0
+next_object_id = 1  
 
-# while True:
-#     try:
-#         Myframe1=cam1.getFrame()
-#         Myframe2=cam2.getFrame()
+while True:
+    try:
+        Myframe1=cam1.getFrame()
+        Myframe2=cam2.getFrame()
 
-#         for frame, frame_name in [(Myframe1, 'Camera 1'), (Myframe2, 'Camera 2')]:
-#                     results=model.track(frame,persist=True)
-#                     print(results)
-#                     annotated_frame = results[0].plot()
-
-
+        for frame, frame_name in [(Myframe1, 'Camera 1'), (Myframe2, 'Camera 2')]:
+                    results=model.track(frame,persist=True)
+                    # print(results)
+                    annotated_frame = results[0].plot()
 
 
-#                     for item in results[0].names:
-#                         if item in object_ids_camera0:
+
+
+                    for item in results[0].names:
+                        if item in object_ids_camera0:
                             
-#                             unique_id = object_ids_camera0[item]
-#                         else:
-#                             # Assign a new unique ID for objects in Camera 0
-#                             unique_id = next_object_id
-#                             # face=face_recognition.face_locations(frame)
+                            unique_id = object_ids_camera0[item]
+                        else:
+                            # Assign a new unique ID for objects in Camera 0
+                            unique_id = next_object_id
+                            # face=face_recognition.face_locations(frame)
+                            object_ids_camera0[item] = unique_id
+                            next_object_id += 1
 
-#                             object_ids_camera0[item] = unique_id
-#                             next_object_id += 1
-
-#                         cv2.putText(annotated_frame, f"ID: {unique_id}", (10, 40), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 2)
-#                     # classIndex, Confidence, box = model.detect(frame, confThreshold=0.5)
-#                     # if len(classIndex) != 0:
-#                     #     for cIndex, conf, boxes in zip(classIndex.flatten(), Confidence.flatten(), box):
-#                     #         # if cIndex <= 9:
-#                     #         if classlabel[cIndex - 1] == "person":
-#                     #             unique_id = assign_unique_id( cIndex, frame_name)  # Assign or retrieve unique ID
-#                     #             cv2.rectangle(frame, boxes, (255, 0, 0), 2)
-#                     #             cv2.putText(frame, f"Person {unique_id}", (boxes[0] + 10, boxes[1] + 40),
-#                     #                 cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 0), 3)
+                        cv2.putText(annotated_frame, f"ID: {unique_id}", (10, 40), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 2)
+                    # classIndex, Confidence, box = model.detect(frame, confThreshold=0.5)
+                    # if len(classIndex) != 0:
+                    #     for cIndex, conf, boxes in zip(classIndex.flatten(), Confidence.flatten(), box):
+                    #         # if cIndex <= 9:
+                    #         if classlabel[cIndex - 1] == "person":
+                    #             unique_id = assign_unique_id( cIndex, frame_name)  # Assign or retrieve unique ID
+                    #             cv2.rectangle(frame, boxes, (255, 0, 0), 2)
+                    #             cv2.putText(frame, f"Person {unique_id}", (boxes[0] + 10, boxes[1] + 40),
+                    #                 cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 0), 3)
                     
-#                     # cv2.imshow(frame_name, frame)
-#                     cv2.imshow(frame_name, annotated_frame)
-#     except:
-#         print('Frame not Available')
+                    # cv2.imshow(frame_name, frame)
+                    cv2.imshow(frame_name, annotated_frame)
+    except:
+        print('Frame not Available')
 
-#     if cv2.waitKey(1)==ord('q'):
-#         cam1.capture.release()
-#         cam2.capture.release()
-#         cv2.destroyAllWindows()
-#         break
+    if cv2.waitKey(1)==ord('q'):
+        cam1.capture.release()
+        cam2.capture.release()
+        cv2.destroyAllWindows()
+        break
 
 
 # from threading import Thread
@@ -608,71 +607,3 @@
 #         cv2.destroyAllWindows()
 #         break
 
-from threading import Thread
-import cv2
-from ultralytics import YOLO
-import face_recognition
-import numpy as np
-
-model = YOLO("yolov8n.pt")
-
-class VStream:
-    def __init__(self, src):
-        self.capture = cv2.VideoCapture(src, cv2.CAP_DSHOW)
-        self.thread = Thread(target=self.update, args=())
-        self.thread.daemon = True
-        self.thread.start()
-
-    def update(self):
-        while True:
-            _, self.frame = self.capture.read()
-
-    def getFrame(self):
-        return self.frame
-
-flip = 2
-dispW = 640
-dispH = 480
-
-cam1 = VStream(0)
-cam2 = VStream(1)
-
-object_ids_camera0 = {}  # Dictionary to store object IDs for Camera 0
-next_object_id = 1  
-
-while True:
-    try:
-        Myframe1 = cam1.getFrame()
-        Myframe2 = cam2.getFrame()
-
-        for frame, frame_name in [(Myframe1, 'Camera 1'), (Myframe2, 'Camera 2')]:
-            results = model.track(frame, persist=True)
-            annotated_frame = results[0].plot()
-
-            for item in results[0].names:
-                if item in object_ids_camera0:
-                    unique_id = object_ids_camera0[item]
-                else:
-                    # Assign a new unique ID for objects in Camera 0
-                    unique_id = next_object_id
-                    face_locations = face_recognition.face_locations(frame)
-                    
-                    if len(face_locations) > 0:
-                        # Take the first detected face for simplicity
-                        face_encodings = face_recognition.face_encodings(frame, [face_locations[0]])
-                        if len(face_encodings) > 0:
-                            face_encoding = face_encodings[0]
-                            object_ids_camera0[item] = (unique_id, face_encoding)
-                            next_object_id += 1
-
-                cv2.putText(annotated_frame, f"ID: {unique_id}", (10, 40), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 2)
-            
-            cv2.imshow(frame_name, annotated_frame)
-    except Exception as e:
-        print(f'Error: {str(e)}')
-
-    if cv2.waitKey(1) == ord('q'):
-        cam1.capture.release()
-        cam2.capture.release()
-        cv2.destroyAllWindows()
-        break
