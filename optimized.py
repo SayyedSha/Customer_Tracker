@@ -1,7 +1,8 @@
 from threading import Thread
 import cv2
-import numpy as np
 from ultralytics import YOLO
+import face_recognition
+import numpy as np
 
 model = YOLO("yolov8n.pt")
 
@@ -28,8 +29,6 @@ faceModel = "opencv_face_detector_uint8.pb"
 
 faceNet=cv2.dnn.readNet(faceModel, faceProto)
 
-
-
 class VStream:
     def __init__(self, src):
         self.capture = cv2.VideoCapture(src, cv2.CAP_DSHOW)
@@ -44,13 +43,17 @@ class VStream:
     def getFrame(self):
         return self.frame
 
+flip = 2
 dispW = 640
 dispH = 480
 
 cam1 = VStream(0)
 cam2 = VStream(1)
 
-padding = 20
+# Create a dictionary to store recognized faces and their unique IDs
+recognized_faces = {}
+next_object_id = 1  
+padding=20
 frame_skip_counter = 0
 
 while True:
@@ -59,13 +62,18 @@ while True:
         Myframe2 = cam2.getFrame()
 
         for frame, frame_name in [(Myframe1, 'Camera 1'), (Myframe2, 'Camera 2')]:
-            frame_skip_counter += 1
+            
+            frames,bboxs=faceBox(faceNet,frame)
+            # frame_skip_counter += 1
 
             if frame_skip_counter % 5 == 0:
-                frames, bboxs = faceBox(faceNet,frame)
-
+                frames, bboxs = faceBox(faceNet, frame)
+            
                 for bbox in bboxs:
-                    cv2.rectangle(frames, (bbox[0], bbox[1] - 30), (bbox[2], bbox[1]), (0, 255, 0), -1)
+                    face=frames[bbox[1]:bbox[3], bbox[0]:bbox[2]]
+                    face = frames[max(0,bbox[1]-padding):min(bbox[3]+padding,frame.shape[0]-1),max(0,bbox[0]-padding):min(bbox[2]+padding, frame.shape[1]-1)]
+                    cv2.rectangle(frames,(bbox[0], bbox[1]-30), (bbox[2], bbox[1]), (0,255,0),-1)
+    
 
             results = model.track(frame, persist=True)
             annotated_frame = results[0].plot()
