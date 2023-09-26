@@ -101,15 +101,19 @@ while True:
             face_encoded=face_recognition.face_encodings(frame,face)
 
             for i, faces in enumerate(face_encoded):
+                # print(i)
                 matches=face_recognition.compare_faces(known_face_encoding,faces)
 
                 if True in matches:
-                    print (faces)
+                    print ("Same")
                 else:
+                    counter=0
                     for top, right, bottom, left in face:
                         person = frame[top:bottom, left:right]
-                        output_path = os.path.join(output_directory, f"face_{frame_skip_counter}.jpg")
-                        recognized_faces.update(unique_id=unique_id)
+                        counter+=1
+                        unique_filename = f"unknown_face_{counter}_{i}.jpg"
+                        output_path = os.path.join(output_directory, unique_filename)
+                        # recognized_faces.update(unique_id=unique_id)
                         cv2.imwrite(output_path, person)
                 
 
