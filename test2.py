@@ -63,11 +63,20 @@ face_detector = dlib.get_frontal_face_detector()
 output_folder = "recognized_faces"
 os.makedirs(output_folder, exist_ok=True)
 
-folder_dir="recognized_faces"
+folder_dir=Path("recognized_faces").glob("*jpg")
 
-image_files = [os.path.join(folder_dir, file) for file in os.listdir(folder_dir) if file.endswith(('.jpg', '.png', '.jpeg'))]
+# image_files = [os.path.join(folder_dir, file) for file in os.listdir(folder_dir) if file.endswith(('.jpg', '.png', '.jpeg'))]
 
 known_face_encoding=[]
+
+known_face_images = []
+known_face_names = []
+
+def load_known_faces(folder_dir):
+    for image_path in folder_dir:
+        image_name = os.path.splitext(os.path.basename(image_path))[0]
+        known_face_names.append(image_name)
+        known_face_images.append(cv2.imread(str(image_path)))
 
 
 
@@ -129,69 +138,58 @@ reference_embeddings = {}
 counter=0
 while True:
     try:
-        
-        for image_file in os.listdir(folder_dir):
-            if image_file.endswith(('.jpg', '.png', '.jpeg')):
-                image_path = os.path.join(folder_dir, image_file)
-                reference_image = dlib.load_rgb_image(image_path)
-
-                face_rectangles = dlib.get_frontal_face_detector()(reference_image)
-
-                for face_rect in face_rectangles:
-                    # Get face landmarks
-                    face_landmarks = dlib.shape_predictor('shape_predictor_5_face_landmarks.dat')(reference_image, face_rect)
-                # face_landmarks = dlib.full_object_detection(reference_image, face_recognition_model )
-                    face_descriptor = np.array(face_recognition_model.compute_face_descriptor(reference_image, face_landmarks))
-                    reference_embeddings[image_file] = face_descriptor
-
+        folder_dir=Path("recognized_faces").glob("*jpg")
+        load_known_faces(folder_dir)
+        print(known_face_images)
 
         Myframe1 = cam1.getFrame()
         Myframe2 = cam2.getFrame()
 
         for frame, frame_name, unique_id in [(Myframe1, 'Camera 1', unique_id_camera_0), (Myframe2, 'Camera 2', None)]:
-            frames, bboxs = faceBox(faceNet, frame)
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            
-            live_face_rectangles=dlib.get_frontal_face_detector()(frame)
-            for live_face_rect in live_face_rectangles:
-
-                live_face_landmarks = dlib.shape_predictor('shape_predictor_5_face_landmarks.dat')(frame, live_face_rect)
-                live_face_descriptor = np.array(face_recognition_model.compute_face_descriptor(frame_rgb, live_face_landmarks))
-
-
-
-            match_found = False
-            for image_file, reference_descriptor in reference_embeddings.items():
-                distance = np.linalg.norm(reference_descriptor - live_face_descriptor)
-
-                # Set a threshold for similarity
-                threshold = 0.6  # You can adjust this threshold as needed
-
-                if distance < threshold:
-                    match_found = True
-                    print(f"Match found with {image_file}")
-
-            if not match_found:
-                print("No match found")
-                for face_rect in live_face_rectangles:        
-                    x, y, w, h = face_rect.left(), face_rect.top(), face_rect.width(), face_rect.height()
-                    non_matching_face = frame[y:y + h, x:x + w]
-                    cv2.imwrite(os.path.join(output_folder, f"non_matching_{len(os.listdir(output_folder)) + 1}.jpg"), non_matching_face)         
- 
+            frames, bboxs = faceBox(faceNet, frame) 
     
             if frame_skip_counter % 5 == 0:
-                            frames, bboxs = faceBox(faceNet, frame)
+                frames, bboxs = faceBox(faceNet, frame)
+                
 
-                            for bbox in bboxs:
-                                face = frames[bbox[1]:bbox[3], bbox[0]:bbox[2]]
-                                face = frames[max(0, bbox[1] - padding):min(bbox[3] + padding, frame.shape[0] - 1),
-                                        max(0, bbox[0] - padding):min(bbox[2] + padding, frame.shape[1] - 1)]
-                                cv2.rectangle(frames, (bbox[0], bbox[1] - 30), (bbox[2], bbox[1]), (0, 255, 0), -1)
+                for bbox in bboxs:
+                    face = frames[bbox[1]:bbox[3], bbox[0]:bbox[2]]
+                    face = frames[max(0, bbox[1] - padding):min(bbox[3] + padding, frame.shape[0] - 1),
+                            max(0, bbox[0] - padding):min(bbox[2] + padding, frame.shape[1] - 1)]
+                    cv2.rectangle(frames, (bbox[0], bbox[1] - 30), (bbox[2], bbox[1]), (0, 255, 0), -1)
+                    
+                    face_gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
 
-            results = model.track(frame, persist=True)
-            annotated_frame = results[0].plot()
+                match_found = False
+                for known_face_image, known_face_name in zip(known_face_images, known_face_names):
+                    # Convert the known face to grayscale
+                    known_face_gray = cv2.cvtColor(known_face_image, cv2.COLOR_BGR2GRAY)
 
-            cv2.imshow(frame_name, annotated_frame)
+                    # Use a face recognition method (e.g., LBPH) for comparison
+                    # You can replace this with your preferred face recognition method
+                    face_recognizer = cv2.face.LBPHFaceRecognizer_create()
+                    face_recognizer.train([known_face_gray], np.array([0]))
+                    label, confidence = face_recognizer.predict(face_gray)
+
+                    # Set a confidence threshold for face recognition
+                    confidence_threshold = 60  # Adjust this threshold as needed
+
+                    if confidence < confidence_threshold:
+                        # If a match is found, update the recognized_faces dictionary
+                        match_found = True
+                        recognized_faces[label] = known_face_name
+
+                # If no match was found, save the unknown face to the output directory
+                if not match_found:
+                    unique_filename = f"unknown_face_{next_object_id}.jpg"
+                    next_object_id += 1
+                    output_path = os.path.join(output_folder, unique_filename)
+                    cv2.imwrite(output_path, face)
+                    
+            # results = model.track(frame, persist=True)
+            # annotated_frame = results[0].plot()
+
+            cv2.imshow(frame_name)
     except Exception as e:
         print(f'Error: {str(e)}')
 

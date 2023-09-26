@@ -82,14 +82,18 @@ cam1 = VStream(0, unique_id=unique_id_camera_0)  # Camera 0 with unique ID
 cam2 = VStream(1)  # Camera 1 with no unique ID initially
 
 frame_skip_counter = 0
+counter=0
 
 while True:
     try:
+        folder_dir=Path("recognized_faces").glob("*.jpg")
         for images in folder_dir:
             image=face_recognition.load_image_file(images)
-            image_encoded=face_recognition.face_encodings(image)[0]
-            known_face_encoding.append(image_encoded)
-        
+            try:
+                image_encoded=face_recognition.face_encodings(image)[0]
+                known_face_encoding.append(image_encoded)
+            except:
+                pass
 
         Myframe1 = cam1.getFrame()
         Myframe2 = cam2.getFrame()
@@ -107,7 +111,7 @@ while True:
                 if True in matches:
                     print ("Same")
                 else:
-                    counter=0
+                   
                     for top, right, bottom, left in face:
                         person = frame[top:bottom, left:right]
                         counter+=1
