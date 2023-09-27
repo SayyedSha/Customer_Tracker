@@ -6,7 +6,7 @@ import os
 from ultralytics import YOLO
 from pathlib import Path
 import face_recognition
-
+import asyncio
 
 # Load YOLO model
 model = YOLO("yolov8n.pt")
@@ -25,8 +25,35 @@ folder_dir=Path("recognized_faces").glob("*.jpg")
 
 known_face_encoding=[]
 
+async def img_dir():
+    folder_dir=Path("recognized_faces").glob("*.jpg")
+    for images in folder_dir:
+        image=face_recognition.load_image_file(images)
+        try:
+            image_encoded=face_recognition.face_encodings(image)[0]
+            known_face_encoding.append(image_encoded)
+        except:
+            pass
 
+async def face_identifier(frame):
+    face=face_recognition.face_locations(frame)
+    face_encoded=face_recognition.face_encodings(frame,face)
 
+    for i, faces in enumerate(face_encoded):
+        # print(i)
+        matches=face_recognition.compare_faces(known_face_encoding,faces)
+
+        if True in matches:
+            print ("Same")
+        else:
+            
+            for top, right, bottom, left in face:
+                person = frame[top:bottom, left:right]
+                counter+=1
+                unique_filename = f"unknown_face_{counter}_{i}.jpg"
+                output_path = os.path.join(output_directory, unique_filename)
+                # recognized_faces.update(unique_id=unique_id)
+                cv2.imwrite(output_path, person)
 
 def faceBox(faceNet, frame):
     frameHeight = frame.shape[0]
@@ -86,14 +113,7 @@ counter=0
 
 while True:
     try:
-        folder_dir=Path("recognized_faces").glob("*.jpg")
-        for images in folder_dir:
-            image=face_recognition.load_image_file(images)
-            try:
-                image_encoded=face_recognition.face_encodings(image)[0]
-                known_face_encoding.append(image_encoded)
-            except:
-                pass
+        asyncio.run(img_dir())
 
         Myframe1 = cam1.getFrame()
         Myframe2 = cam2.getFrame()
@@ -101,24 +121,7 @@ while True:
         for frame, frame_name, unique_id in [(Myframe1, 'Camera 1', unique_id_camera_0), (Myframe2, 'Camera 2', None)]:
             frames, bboxs = faceBox(faceNet, frame)
     
-            face=face_recognition.face_locations(frame)
-            face_encoded=face_recognition.face_encodings(frame,face)
-
-            for i, faces in enumerate(face_encoded):
-                # print(i)
-                matches=face_recognition.compare_faces(known_face_encoding,faces)
-
-                if True in matches:
-                    print ("Same")
-                else:
-                   
-                    for top, right, bottom, left in face:
-                        person = frame[top:bottom, left:right]
-                        counter+=1
-                        unique_filename = f"unknown_face_{counter}_{i}.jpg"
-                        output_path = os.path.join(output_directory, unique_filename)
-                        # recognized_faces.update(unique_id=unique_id)
-                        cv2.imwrite(output_path, person)
+            asyncio.run(face_identifier(frame))
                 
 
             # if unique_id is not None:
@@ -159,14 +162,14 @@ while True:
 
                 # frame_skip_counter += 1
 
-                if frame_skip_counter % 5 == 0:
-                    frames, bboxs = faceBox(faceNet, frame)
+            if frame_skip_counter % 5 == 0:
+                frames, bboxs = faceBox(faceNet, frame)
 
-                    for bbox in bboxs:
-                        face = frames[bbox[1]:bbox[3], bbox[0]:bbox[2]]
-                        face = frames[max(0, bbox[1] - padding):min(bbox[3] + padding, frame.shape[0] - 1),
-                                max(0, bbox[0] - padding):min(bbox[2] + padding, frame.shape[1] - 1)]
-                        cv2.rectangle(frames, (bbox[0], bbox[1] - 30), (bbox[2], bbox[1]), (0, 255, 0), -1)
+                for bbox in bboxs:
+                    face = frames[bbox[1]:bbox[3], bbox[0]:bbox[2]]
+                    face = frames[max(0, bbox[1] - padding):min(bbox[3] + padding, frame.shape[0] - 1),
+                            max(0, bbox[0] - padding):min(bbox[2] + padding, frame.shape[1] - 1)]
+                    cv2.rectangle(frames, (bbox[0], bbox[1] - 30), (bbox[2], bbox[1]), (0, 255, 0), -1)
 
             results = model.track(frame, persist=True)
             annotated_frame = results[0].plot()
