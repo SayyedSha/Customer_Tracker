@@ -447,6 +447,7 @@ import torch
 # Load YOLO model
 model = YOLO("yolov8n.pt")
 
+
 face_detector = dlib.get_frontal_face_detector()
 
 # Load a pre-trained shape predictor model for face landmark detection
