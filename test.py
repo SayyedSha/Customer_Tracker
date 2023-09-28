@@ -129,4 +129,8 @@ for cap in cameras:
     cap.release()
 cv2.destroyAllWindows()
 
-pip install torch==1.9.0+cu102 torchvision==0.10.0+cu102 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
+load_known_face_encodings_lambda = lambda: [
+    face_recognition.face_encodings(face_recognition.load_image_file(image))[0]
+    for image in Path("recognized_faces").glob("*.jpg")
+    if face_recognition.face_encodings(face_recognition.load_image_file(image))
+]
