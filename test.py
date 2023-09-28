@@ -270,3 +270,149 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 
+from threading import Thread
+import cv2
+import dlib
+import numpy as np
+import os
+from ultralytics import YOLO
+from pathlib import Path
+import asyncio
+import torch
+from multiprocessing import Process, Manager
+
+# Load YOLO model
+model = YOLO("yolov8n.pt")
+
+# Load a pre-trained shape predictor model for face landmark detection
+shape_predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
+
+# Load a pre-trained face recognition model from dlib
+face_recognition_model = dlib.face_recognition_model_v1("dlib_face_recognition_resnet_model_v1.dat")
+
+# Directory to save the recognized faces
+output_directory = "recognized_faces"
+os.makedirs(output_directory, exist_ok=True)
+
+known_face_encodings = []
+
+# Function to load known face encodings
+def load_known_faces():
+    folder_dir = Path("recognized_faces").glob("*.jpg")
+    for image_path in folder_dir:
+        image = cv2.imread(str(image_path))
+        face_encoding = compute_face_encoding(image)
+        if face_encoding is not None:
+            known_face_encodings.append(face_encoding)
+
+# Function to compute face encodings using dlib
+def compute_face_encoding(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    face_rectangles = face_detector(gray)
+    if len(face_rectangles) == 0:
+        return None  # No face found
+    landmarks = shape_predictor(gray, face_rectangles[0])
+    face_encoding = np.array(face_recognition_model.compute_face_descriptor(image, landmarks))
+    return face_encoding
+
+# Function for face recognition and comparison
+def face_recognition_worker(frame, result_dict, counter):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    face_rectangles = face_detector(gray)
+    for i, rect in enumerate(face_rectangles):
+        face_encoding = compute_face_encoding(frame)
+        if face_encoding is not None:
+            for known_encoding in known_face_encodings:
+                distance = np.linalg.norm(face_encoding - known_encoding)
+                if distance < 0.6:  # Adjust the threshold as needed
+                    result_dict[counter] = "Recognized"
+                    break
+            else:
+                with counter.get_lock():
+                    counter.value += 1
+                unique_filename = f"unknown_face_{counter.value}_{i}.jpg"
+                output_path = os.path.join(output_directory, unique_filename)
+                cv2.imwrite(output_path, frame)
+                result_dict[counter.value] = "Unknown"
+
+# Rest of your code remains the same
+async def faceBox(faceNet, frame):
+    # Implement your face detection logic here
+
+# Define a class for camera streaming
+class VStream:
+    def __init__(self, src, unique_id=None):
+        self.capture = cv2.VideoCapture(src, cv2.CAP_DSHOW)
+        self.thread = Thread(target=self.update, args=())
+        self.thread.daemon = True
+        self.thread.start()
+        self.unique_id = unique_id
+
+    def update(self):
+        while True:
+            _, self.frame = self.capture.read()
+
+    def getFrame(self):
+        return self.frame
+
+flip = 2
+dispW = 640
+dispH = 480
+
+# Create a dictionary to store recognized faces and their unique IDs
+recognized_faces = {}
+next_object_id = 1
+padding = 20
+
+# Initialize a variable to store the unique ID for recognized faces from Camera 0
+unique_id_camera_0 = None
+
+cam1 = VStream(0, unique_id=unique_id_camera_0)  # Camera 0 with unique ID
+cam2 = VStream(1)  # Camera 1 with no unique ID initially
+
+frame_skip_counter = 0
+
+# Use a multiprocessing manager to create a shared counter
+manager = Manager()
+counter = manager.Value('i', 0)
+
+# Use a multiprocessing manager to create a shared dictionary for results
+result_dict = manager.dict()
+
+# Main asyncio event loop
+async def main():
+    load_known_faces()
+    while True:
+        try:
+            Myframe1 = cam1.getFrame()
+            Myframe2 = cam2.getFrame()
+
+            for frame, frame_name, unique_id in [(Myframe1, 'Camera 1', unique_id_camera_0), (Myframe2, 'Camera 2', None)]:
+                counter.value += 1
+                process = Process(target=face_recognition_worker, args=(frame, result_dict, counter))
+                process.start()
+                process.join()
+
+                frames, bboxs = await faceBox(faceNet, frame)
+
+                for bbox in bboxs:
+                    face = frames[bbox[1]:bbox[3], bbox[0]:bbox[2]]
+                    face = frames[max(0, bbox[1] - padding):min(bbox[3] + padding, frame.shape[0] - 1),
+                            max(0, bbox[0] - padding):min(bbox[2] + padding, frame.shape[1] - 1)]
+                    cv2.rectangle(frames, (bbox[0], bbox[1] - 30), (bbox[2], bbox[1]), (0, 255, 0), -1)
+
+                results = model.track(frame, persist=True)
+                annotated_frame = results[0].plot()
+
+                cv2.imshow(frame_name, annotated_frame)
+        except Exception as e:
+            print(f'Error: {str(e)}')
+
+        if cv2.waitKey(1) == ord('q'):
+            cam1.capture.release()
+            cam2.capture.release()
+            cv2.destroyAllWindows()
+            break
+
+if __name__ == "__main__":
+    asyncio.run(main())
