@@ -139,12 +139,10 @@ from ultralytics import YOLO
 from pathlib import Path
 import asyncio
 import torch
+from multiprocessing import Process, Manager
 
 # Load YOLO model
 model = YOLO("yolov8n.pt")
-
-
-face_detector = dlib.get_frontal_face_detector()
 
 # Load a pre-trained shape predictor model for face landmark detection
 shape_predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
@@ -177,7 +175,8 @@ def compute_face_encoding(image):
     face_encoding = np.array(face_recognition_model.compute_face_descriptor(image, landmarks))
     return face_encoding
 
-async def face_identifier(frame, counter):
+# Function for face recognition and comparison
+def face_recognition_worker(frame, counter, known_face_encodings, result_dict):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     face_rectangles = face_detector(gray)
     for i, rect in enumerate(face_rectangles):
@@ -186,9 +185,10 @@ async def face_identifier(frame, counter):
             for known_encoding in known_face_encodings:
                 distance = np.linalg.norm(face_encoding - known_encoding)
                 if distance < 0.6:  # Adjust the threshold as needed
-                    print("Recognized")
+                    result_dict[counter] = "Recognized"
                     break
             else:
+                result_dict[counter] = "Unknown"
                 counter += 1
                 unique_filename = f"unknown_face_{counter}_{i}.jpg"
                 output_path = os.path.join(output_directory, unique_filename)
@@ -196,28 +196,9 @@ async def face_identifier(frame, counter):
 
 # Rest of your code remains the same
 async def faceBox(faceNet, frame):
-    frameHeight = frame.shape[0]
-    frameWidth = frame.shape[1]
-    blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), [104, 117, 123], swapRB=False)
-    faceNet.setInput(blob)
-    detection = faceNet.forward()
-    bboxs = []
-    for i in range(detection.shape[2]):
-        confidence = detection[0, 0, i, 2]
-        if confidence > 0.7:
-            x1 = int(detection[0, 0, i, 3] * frameWidth)
-            y1 = int(detection[0, 0, i, 4] * frameHeight)
-            x2 = int(detection[0, 0, i, 5] * frameWidth)
-            y2 = int(detection[0, 0, i, 6] * frameHeight)
-            bboxs.append([x1, y1, x2, y2])
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 1)
-    return frame, bboxs
+    # Implement your face detection logic here
 
-faceProto = "opencv_face_detector.pbtxt"
-faceModel = "opencv_face_detector_uint8.pb"
-
-faceNet = cv2.dnn.readNet(faceModel, faceProto)
-
+# Define a class for camera streaming
 class VStream:
     def __init__(self, src, unique_id=None):
         self.capture = cv2.VideoCapture(src, cv2.CAP_DSHOW)
@@ -249,8 +230,7 @@ cam1 = VStream(0, unique_id=unique_id_camera_0)  # Camera 0 with unique ID
 cam2 = VStream(1)  # Camera 1 with no unique ID initially
 
 frame_skip_counter = 0
-global counter
-counter=0
+counter = 0
 
 # Main asyncio event loop
 async def main():
@@ -261,8 +241,12 @@ async def main():
             Myframe2 = cam2.getFrame()
 
             for frame, frame_name, unique_id in [(Myframe1, 'Camera 1', unique_id_camera_0), (Myframe2, 'Camera 2', None)]:
+                counter += 1
+                process = Process(target=face_recognition_worker, args=(frame, counter, known_face_encodings, result_dict))
+                process.start()
+                process.join()
+
                 frames, bboxs = await faceBox(faceNet, frame)
-                await face_identifier(frame, counter)
 
                 for bbox in bboxs:
                     face = frames[bbox[1]:bbox[3], bbox[0]:bbox[2]]
@@ -285,3 +269,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
